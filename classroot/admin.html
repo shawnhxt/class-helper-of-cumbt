@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#fdf9f4">
+    <title>管理后台 · 班级事务</title>
+    {#- 与首页共用同一份设计系统（颜色 / 圆角 / 卡片 / 表单控件都在这里），
+        本页不再自带一套 <style>，避免两个页面各写一套色值而逐渐走样。
+        图标同样来自本地 SVG 精灵，不依赖 Font Awesome CDN。 -#}
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+    <link rel="icon" href="{{ url_for('static', path='/cover.ico') }}" type="image/x-icon">
+</head>
+<body class="admin">
+    <div class="admin-topbar">
+        <h1>
+            <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-save"></use></svg>
+            班级事项管理
+        </h1>
+        <a class="btn btn-primary" href="/">
+            <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-arrow-left"></use></svg>
+            返回主页
+        </a>
+    </div>
+    <p class="admin-sub">
+        当前数据后端：<span class="badge {{ backend }}">{{ backend | upper }}</span>
+        {% if backend == 'sqlite' %}<span>（未连接 MySQL，正在使用 SQLite 文件）</span>{% endif %}
+    </p>
+
+    {% if backend == 'sqlite' and db_error %}
+    <div class="notice-bar">
+        <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-info"></use></svg>
+        <div>未连接 MySQL（{{ db_error }}），已自动降级到 SQLite 文件。
+        数据库账密只从项目根目录的 <code>db.conf</code> 读取，请依次确认：
+        ① <code>db.conf</code> 与 <code>main.py</code> 同目录且存在；
+        ② 其中 <code>user</code> / <code>password</code> / <code>db</code> 三项均已填写；
+        ③ 已安装 <code>pymysql</code> 并重启项目。
+        方括号内是程序实际使用的账号，密码只显示「已填 / 未填」。</div>
+    </div>
+    {% endif %}
+
+    <!-- 新增 / 修改表单：两种模式共用同一组字段，
+         点列表里的「编辑」会切到修改模式并把该条内容填进来 -->
+    <section class="admin-card">
+        <h2 id="formTitle">
+            <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-plus"></use></svg>
+            <span id="formTitleText">新增事项</span>
+        </h2>
+        <form id="addForm">
+            <div class="admin-grid">
+                <div>
+                    <label class="field-label" for="titleInput">标题 <span class="req">*</span></label>
+                    <input id="titleInput" name="title" required placeholder="如：新生体检">
+                </div>
+                <div>
+                    <label class="field-label" for="categorySelect">分类</label>
+                    <select name="category" id="categorySelect">
+                        {% for key in category_order %}
+                        <option value="{{ key }}">{{ categories[key] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label" for="deadlineInput">截止时间（精确到分钟）</label>
+                    <input name="deadline" id="deadlineInput" type="datetime-local">
+                    <div class="hint">级别与排序都由它自动决定，留空则按「普通」处理。</div>
+                </div>
+                <div>
+                    <label class="field-label" for="tagInput">标签（短）</label>
+                    <input id="tagInput" name="tag" placeholder="如：重要 / 选课 / 班会">
+                </div>
+                <div>
+                    <label class="field-label" for="dateLabelInput">日期显示（留空自动取截止时间的月-日）</label>
+                    <input id="dateLabelInput" name="date_label" placeholder="如：09-13 / 第三周">
+                </div>
+                <div>
+                    <label class="field-label" for="timeLabelInput">时间显示（留空自动取截止时间的时:分）</label>
+                    <input id="timeLabelInput" name="time_label" placeholder="如：15:00 截止">
+                </div>
+                <div>
+                    <label class="field-label" for="locationInput">地点</label>
+                    <input id="locationInput" name="location" placeholder="如：校医院">
+                </div>
+                <div>
+                    <label class="field-label" for="linkInput">跳转链接（可选）</label>
+                    <input id="linkInput" name="link" placeholder="http://...">
+                </div>
+                <div>
+                    <label class="field-label">置顶</label>
+                    <label class="pin-toggle">
+                        <input type="checkbox" name="pinned" id="pinnedInput" value="1">
+                        <span>把这条事项置顶到「<span id="pinCatName">班级通知</span>」栏目最前</span>
+                    </label>
+                    <div class="hint">每个栏目只允许一条置顶，勾选后会自动顶替该栏目原有的置顶事项。置顶事项优先级最高，且<strong>不会因截止时间已过而被折叠</strong>，只能在下方列表里手动取消。</div>
+                </div>
+                <div>
+                    <label class="field-label">接龙</label>
+                    <label class="roll-toggle">
+                        <input type="checkbox" name="rollcall" id="rollcallInput" value="1">
+                        <span>开启「接龙」报名</span>
+                    </label>
+                    <div class="hint">开启后，首页这条卡片整块可点，进入<strong>接龙页面</strong>（<code>/rollcall/事项id</code>）填写姓名；同学接龙后，他自己的主页上这条会显示「已接龙」并按<strong>已完成</strong>处理。名单保存在数据库里，所有人可见。</div>
+                </div>
+                {#- 接龙「附加信息」配置（v1.8.0）：报名表单第二栏的名字与填法。
+                    整块只在勾了「开启接龙」时显示，但字段始终在表单里 ——
+                    没勾接龙时照样提交，等于先把配置存着，之后勾开就能直接用。 -#}
+                <div class="row-full roll-note-config" id="rollNoteConfig" hidden>
+                    <label class="field-label">接龙的「附加信息」</label>
+                    <div class="admin-grid">
+                        <div>
+                            <label class="field-label" for="rollNoteLabelInput">名称（报名时这一栏叫什么）</label>
+                            <input id="rollNoteLabelInput" name="roll_note_label"
+                                   maxlength="{{ roll_note_label_max }}"
+                                   value="{{ roll_note_label_default }}"
+                                   placeholder="{{ roll_note_label_default }}">
+                        </div>
+                        <div>
+                            <label class="field-label" for="rollNoteModeSelect">类别（怎么填）</label>
+                            <select name="roll_note_mode" id="rollNoteModeSelect">
+                                {% for key in roll_note_mode_order %}
+                                <option value="{{ key }}">{{ roll_note_modes[key] }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <label class="roll-toggle">
+                        <input type="checkbox" name="roll_note_required" id="rollNoteRequiredInput" value="1">
+                        <span>强制填写附加信息</span>
+                    </label>
+                    <div id="rollNoteOptionsWrap" hidden>
+                        <label class="field-label" for="rollNoteOptionsInput">候选项（一行一个，最多 {{ roll_note_options_max }} 个，每个不超过 {{ note_max }} 个字）</label>
+                        <textarea id="rollNoteOptionsInput" name="roll_note_options" placeholder="参加"></textarea>
+                    </div>
+                    <div class="hint">
+                        两种类别在数据库里<strong>都是同一个字符串</strong>，区别只是报名时省不省事：
+                        <strong>输入文本</strong>——自由填，最多 {{ note_max }} 个字；
+                        <strong>进行选择</strong>——报名页把下面这些候选项<strong>一项一颗按钮全铺出来</strong>
+                        （排成一行，放不下自动换行），点一下即可，库里存选中的那一项文字。
+                        名单展示与「复制接龙结果」对两种类别一视同仁，以后加类别也不用改数据库。
+                    </div>
+                </div>
+                <div class="row-full">
+                    <label class="field-label" for="noteInput">备注详情（事项说明，与接龙的附加信息无关）</label>
+                    <textarea id="noteInput" name="note" placeholder="事项的补充说明"></textarea>
+                </div>
+            </div>
+
+            <div class="preview" id="preview">选择分类和截止时间后，这里会实时预览判定结果。</div>
+            <div class="hint hint-rules">
+                判定规则：
+                班级通知 / 作业提醒 —— 距截止 {{ urgent_hours.notice }} 小时内为「紧急」，超过为「普通」；
+                网课提醒 —— 距截止 {{ urgent_hours.online }} 小时内为「紧急」。
+                截止时间已过一律显示「已完成」。已完成超过 1 天的事项自动折叠，展开时才加载。
+            </div>
+
+            <div class="submit-row">
+                <button type="submit" class="btn btn-primary submit-btn" id="submitBtn">
+                    <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-save"></use></svg>
+                    <span id="submitText">上传</span>
+                </button>
+                <button type="button" class="btn btn-ghost" id="cancelEditBtn" hidden>
+                    <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-close"></use></svg>
+                    取消编辑
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <!-- 列表：按分类分页签，已完成折叠 -->
+    <section class="admin-card">
+        <h2>
+            <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-list"></use></svg>
+            当前事项
+        </h2>
+        <div class="tabs" id="tabs"></div>
+        <div id="list"><div class="empty">加载中…</div></div>
+        <div class="fold-bar" id="foldBar" style="display:none">
+            <span>
+                <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-archive"></use></svg>
+                已完成（<span id="foldCount">0</span> 条）· 点击展开加载
+            </span>
+            <svg class="ic chev" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-chevron-down"></use></svg>
+        </div>
+        <div class="fold-body" id="foldBody"></div>
+    </section>
+
+    <script>
+        // 图标精灵地址从页面已有的 <use> 上取，保证与模板里 url_for 生成的路径一致
+        const ICON_SPRITE = (() => {
+            const use = document.querySelector('use');
+            const href = use && (use.getAttribute('href') || use.getAttribute('xlink:href'));
+            return (href && href.indexOf('#') > -1) ? href.slice(0, href.indexOf('#')) : '/static/icons.svg';
+        })();
+        function iconSvg(name) {
+            return `<svg class="ic" aria-hidden="true"><use href="${ICON_SPRITE}#${name}"></use></svg>`;
+        }
+
+        const listEl = document.getElementById('list');
+        const tabsEl = document.getElementById('tabs');
+        const foldBar = document.getElementById('foldBar');
+        const foldBody = document.getElementById('foldBody');
+        const foldCount = document.getElementById('foldCount');
+        const previewEl = document.getElementById('preview');
+        const formEl = document.getElementById('addForm');
+        const formTitleText = document.getElementById('formTitleText');
+        const submitText = document.getElementById('submitText');
+        const cancelEditBtn = document.getElementById('cancelEditBtn');
+        const categorySelect = document.getElementById('categorySelect');
+        const deadlineInput = document.getElementById('deadlineInput');
+        const pinnedInput = document.getElementById('pinnedInput');
+        const rollcallInput = document.getElementById('rollcallInput');
+        const pinCatName = document.getElementById('pinCatName');
+        // 接龙「附加信息」的四件套（v1.8.0）
+        const rollNoteConfig = document.getElementById('rollNoteConfig');
+        const rollNoteLabelInput = document.getElementById('rollNoteLabelInput');
+        const rollNoteModeSelect = document.getElementById('rollNoteModeSelect');
+        const rollNoteRequiredInput = document.getElementById('rollNoteRequiredInput');
+        const rollNoteOptionsWrap = document.getElementById('rollNoteOptionsWrap');
+        const rollNoteOptionsInput = document.getElementById('rollNoteOptionsInput');
+
+        // 分类定义、顺序、紧急阈值、级别名，均由后端注入，保证与 db.py 单一来源。
+        // 页签次序由 CATEGORY_ORDER 决定，而不是取 CATEGORIES 的键顺序，
+        // 这样以后往 CATEGORIES 里加分类也不会打乱页面上三个选项的排列。
+        const CATEGORIES = {{ categories | tojson }};
+        const CATEGORY_ORDER = {{ category_order | tojson }};
+        const URGENT_HOURS = {{ urgent_hours | tojson }};
+        const LEVEL_NAME = {{ level_name | tojson }};
+        // 附加信息类别（key 入库，中文名只是显示用）与默认名称
+        const NOTE_MODE_NAME = {{ roll_note_modes | tojson }};
+        const NOTE_LABEL_DEFAULT = {{ roll_note_label_default | tojson }};
+
+        let currentCat = 'notice';      // 当前页签
+        let foldLoaded = false;         // 折叠区是否已加载（懒加载标记）
+        let foldOpen = false;
+        let editingId = null;           // 非空表示表单处于「修改」模式
+        const rowsById = new Map();     // id -> 该条原始数据，点编辑时回填表单
+
+        function esc(s) {
+            return (s == null ? '' : String(s)).replace(/[&<>"]/g, c =>
+                ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        }
+
+        // 与后端 compute_level 保持一致的前端预览算法
+        function computeLevel(category, deadline) {
+            if (!deadline) return 'normal';
+            const ms = new Date(deadline).getTime() - Date.now();
+            if (ms <= 0) return 'done';
+            const threshold = (URGENT_HOURS[category] || 24) * 3600 * 1000;
+            return ms <= threshold ? 'urgent' : 'normal';
+        }
+
+        function durationText(ms) {
+            let min = Math.floor(Math.abs(ms) / 60000);
+            const d = Math.floor(min / 1440); min %= 1440;
+            const h = Math.floor(min / 60); min %= 60;
+            if (d) return d + '天' + h + '小时';
+            if (h) return h + '小时' + min + '分';
+            return min + '分钟';
+        }
+
+        // 接龙「附加信息」配置的一句话摘要，预览与列表共用
+        function noteSummary(mode, label, required) {
+            return '附加信息「' + (label || NOTE_LABEL_DEFAULT) + '」：'
+                + (NOTE_MODE_NAME[mode] || '输入文本') + '，' + (required ? '必填' : '选填');
+        }
+
+        // 附加信息配置面板的显隐：只在勾了「开启接龙」时才显示（没开接龙时这些设置
+        // 没有意义）；类别选「进行选择」时才显示候选项文本框。
+        // 字段本身始终留在表单里 —— 被 hidden 的控件照样会随表单提交，
+        // 所以"先把附加信息配好、之后再勾开接龙"也是可以的。
+        function syncNoteConfig() {
+            const on = !!(rollcallInput && rollcallInput.checked);
+            if (rollNoteConfig) rollNoteConfig.hidden = !on;
+            if (rollNoteOptionsWrap) {
+                rollNoteOptionsWrap.hidden = !(on && rollNoteModeSelect
+                                               && rollNoteModeSelect.value === 'select');
+            }
+        }
+
+        function updatePreview() {
+            syncNoteConfig();
+            const category = categorySelect.value;
+            const categoryName = categorySelect.options[categorySelect.selectedIndex].text;
+            // 置顶说明里的栏目名跟着分类下拉走
+            if (pinCatName) pinCatName.textContent = categoryName;
+            const pinned = pinnedInput && pinnedInput.checked;
+            const raw = deadlineInput.value;
+            // 接龙只是一个附加开关，三种判定结果后面都缀一句，不单独占一行；
+            // 顺带把附加信息配置写进预览，改完当场能看到"报名页会变成什么样"
+            const noteLabel = ((rollNoteLabelInput && rollNoteLabelInput.value) || '').trim()
+                              || NOTE_LABEL_DEFAULT;
+            const noteMode = (rollNoteModeSelect && rollNoteModeSelect.value) || 'text';
+            const noteRequired = !!(rollNoteRequiredInput && rollNoteRequiredInput.checked);
+            const rollNote = (rollcallInput && rollcallInput.checked)
+                ? ' · <b>已开启接龙</b>（首页卡片可点，同学接龙后按已完成显示；'
+                  + esc(noteSummary(noteMode, noteLabel, noteRequired)) + '）' : '';
+
+            // 置顶优先级最高：即使截止时间已过也不会显示"已完成"，
+            // 这里与后端 _enrich 的判定保持一致，避免预览与实际不符
+            if (pinned) {
+                previewEl.className = 'preview pinned';
+                previewEl.innerHTML = '<b>' + esc(categoryName) + '</b> · <b>置顶</b>'
+                    + (raw ? '（截止 ' + esc(new Date(raw).toLocaleString('zh-CN', { hour12: false })) + '，已过也不会折叠）' : '')
+                    + ' —— 将排在「' + esc(categoryName) + '」栏目最前' + rollNote;
+                return;
+            }
+
+            if (!raw) {
+                previewEl.className = 'preview';
+                previewEl.innerHTML = '<b>' + esc(categoryName) + '</b> · 未填截止时间 → <b>普通</b>' + rollNote;
+                return;
+            }
+            const level = computeLevel(category, raw);
+            const ms = new Date(raw).getTime() - Date.now();
+            const extra = level === 'done' ? '已过 ' + durationText(ms) : '剩 ' + durationText(ms);
+            previewEl.className = 'preview ' + level;
+            previewEl.innerHTML = '<b>' + esc(categoryName) + '</b> · 截止 '
+                + esc(new Date(raw).toLocaleString('zh-CN', { hour12: false }))
+                + ' → <b>' + LEVEL_NAME[level] + '</b>（' + extra + '）' + rollNote;
+        }
+
+        categorySelect.addEventListener('change', updatePreview);
+        deadlineInput.addEventListener('input', updatePreview);
+        if (pinnedInput) pinnedInput.addEventListener('change', updatePreview);
+        if (rollcallInput) rollcallInput.addEventListener('change', updatePreview);
+        // 附加信息的三项改动也要立刻反映到预览里（updatePreview 内部会顺带同步面板显隐）
+        [rollNoteLabelInput, rollNoteModeSelect, rollNoteRequiredInput].forEach(el => {
+            if (!el) return;
+            el.addEventListener('input', updatePreview);
+            el.addEventListener('change', updatePreview);
+        });
+        updatePreview();
+
+        function itemHtml(n) {
+            rowsById.set(n.id, n);   // 点「编辑」时按 id 取回原始数据回填表单
+            const levelName = LEVEL_NAME[n.level] || '普通';
+            const meta = [
+                n.deadline ? '截止 ' + n.deadline : '',
+                n.countdown || '',
+                n.location || '',
+            ].filter(Boolean).join(' · ');
+            const pinned = !!n.pinned;
+            // 接龙事项在管理页也给一个入口，直接看名单（新窗口打开，不打断编辑）；
+            // 后面缀一句附加信息配置，扫一眼列表就知道这条报名时让人填什么
+            const rollLine = n.rollcall
+                ? `<div class="m">接龙名单（${n.rollcount} 人）：
+                     <a class="inline-link" href="/rollcall/${n.id}" target="_blank" rel="noopener">查看 / 代报名</a>
+                     · ${esc(noteSummary(n.roll_note_mode, n.roll_note_label, n.roll_note_required))}
+                   </div>`
+                : '';
+            return `<div class="item${pinned ? ' pinned-item' : ''}">
+                <div class="info">
+                    <div class="t">${pinned ? iconSvg('i-pin') : ''}${esc(n.title)}
+                        <span class="tag ${esc(n.level)}">${esc(n.joined ? '已接龙' : levelName)}</span>
+                        <span class="tag cate">${esc(n.category_name || '')}</span>
+                        ${n.tag ? `<span class="tag cate">${esc(n.tag)}</span>` : ''}
+                        ${n.rollcall ? `<span class="tag cate">${iconSvg('i-users')}接龙</span>` : ''}
+                    </div>
+                    ${meta ? `<div class="m">${esc(meta)}</div>` : ''}
+                    ${n.note ? `<div class="m">${esc(n.note)}</div>` : ''}
+                    ${rollLine}
+                </div>
+                <div class="item-actions">
+                    <button class="btn-sm pin-btn ${pinned ? 'btn-honey' : 'btn-soft'}" data-id="${n.id}" data-pinned="${pinned ? 1 : 0}">
+                        ${iconSvg('i-pin')} ${pinned ? '取消置顶' : '设为置顶'}
+                    </button>
+                    <div class="icon-row">
+                        <button class="btn-sm btn-soft edit-btn" data-id="${n.id}" title="修改这条事项" aria-label="修改">${iconSvg('i-edit')}</button>
+                        <button class="btn-sm del btn-danger-soft" data-id="${n.id}" data-del="1" title="删除" aria-label="删除">${iconSvg('i-trash')}</button>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        // ---- 分类页签 ----
+        async function loadCounts() {
+            const r = await fetch('/api/counts');
+            const j = await r.json();
+            const groups = j.groups || {};
+            // 按 CATEGORY_ORDER 渲染，次序固定为「班级通知 / 作业提醒 / 网课提醒」
+            tabsEl.innerHTML = CATEGORY_ORDER.map(key => {
+                const g = groups[key] || { name: CATEGORIES[key], active: 0, folded: 0 };
+                const cls = key === currentCat ? 'tab active' : 'tab';
+                return `<span class="${cls}" data-cat="${key}">${esc(g.name)}<span class="n">${g.active + g.folded}</span></span>`;
+            }).join('');
+            const cur = groups[currentCat];
+            if (cur && cur.folded > 0) {
+                foldBar.style.display = 'flex';
+                foldCount.textContent = cur.folded;
+            } else {
+                foldBar.style.display = 'none';
+                foldBody.classList.remove('open');
+                foldBody.innerHTML = '';
+                foldBar.classList.remove('open');
+                foldLoaded = false;
+                foldOpen = false;
+            }
+        }
+
+        async function loadList() {
+            // 未折叠部分（进行中 + 刚完成）
+            const r = await fetch('/api/notices?category=' + encodeURIComponent(currentCat));
+            const j = await r.json();
+            const rows = j.data || [];
+            if (!rows.length) {
+                listEl.innerHTML = '<div class="empty">该分类暂无进行中的事项。</div>';
+            } else {
+                listEl.innerHTML = rows.map(itemHtml).join('');
+            }
+        }
+
+        async function switchCat(cat) {
+            currentCat = cat;
+            foldLoaded = false;   // 换分类后折叠区需要重新按需加载
+            foldOpen = false;
+            foldBody.classList.remove('open');
+            foldBody.innerHTML = '';
+            foldBar.classList.remove('open');
+            listEl.innerHTML = '<div class="empty">加载中…</div>';
+            await Promise.all([loadCounts(), loadList()]);
+        }
+
+        tabsEl.addEventListener('click', (e) => {
+            const tab = e.target.closest('.tab');
+            if (!tab) return;
+            switchCat(tab.dataset.cat);
+        });
+
+        // ---- 折叠区：点击才请求（懒加载） ----
+        async function loadFolded() {
+            foldBody.innerHTML = '<div class="fold-loading">加载中…</div>';
+            try {
+                const r = await fetch('/api/notices?category=' + encodeURIComponent(currentCat) + '&folded=1');
+                const j = await r.json();
+                const rows = j.data || [];
+                foldBody.innerHTML = rows.length
+                    ? rows.map(itemHtml).join('')
+                    : '<div class="empty">没有已完成超过 1 天的事项。</div>';
+                foldLoaded = true;
+            } catch (err) {
+                foldBody.innerHTML = '<div class="empty">加载失败，点击重试。</div>';
+            }
+        }
+
+        foldBar.addEventListener('click', async () => {
+            foldOpen = !foldOpen;
+            foldBar.classList.toggle('open', foldOpen);
+            foldBody.classList.toggle('open', foldOpen);
+            if (!foldOpen) return;        // 收起时不请求
+            if (foldLoaded) return;       // 已加载过就不重复请求，减轻服务器负担
+            await loadFolded();
+        });
+
+        // ---- 新增 / 修改 ----
+        // 两种模式共用同一个表单：点「编辑」把该条内容回填进来并记住 id，
+        // 提交时按 editingId 决定走 POST 还是 PUT，字段与校验完全一致。
+        function setTitleIcon(name) {
+            const use = formTitleText.parentElement.querySelector('use');
+            if (use) use.setAttribute('href', ICON_SPRITE + '#' + name);
+        }
+
+        function fillForm(n) {
+            document.getElementById('titleInput').value = n.title || '';
+            categorySelect.value = n.category || 'notice';
+            // datetime-local 只认 "YYYY-MM-DDTHH:MM"，接口返回的是空格分隔的写法
+            deadlineInput.value = (n.deadline || '').replace(' ', 'T');
+            document.getElementById('tagInput').value = n.tag || '';
+            document.getElementById('dateLabelInput').value = n.date_label || '';
+            document.getElementById('timeLabelInput').value = n.time_label || '';
+            document.getElementById('locationInput').value = n.location || '';
+            document.getElementById('linkInput').value = n.link || '';
+            document.getElementById('noteInput').value = n.note || '';
+            pinnedInput.checked = !!n.pinned;
+            rollcallInput.checked = !!n.rollcall;
+            // 附加信息配置：接口把 roll_note_options 返成数组，textarea 要一行一个
+            if (rollNoteLabelInput) rollNoteLabelInput.value = n.roll_note_label || NOTE_LABEL_DEFAULT;
+            if (rollNoteModeSelect) rollNoteModeSelect.value = n.roll_note_mode || 'text';
+            if (rollNoteRequiredInput) rollNoteRequiredInput.checked = !!n.roll_note_required;
+            if (rollNoteOptionsInput) {
+                rollNoteOptionsInput.value = Array.isArray(n.roll_note_options)
+                    ? n.roll_note_options.join('\n')
+                    : (n.roll_note_options || '');
+            }
+        }
+
+        function enterEditMode(n) {
+            editingId = n.id;
+            fillForm(n);
+            formTitleText.textContent = '修改事项 #' + n.id;
+            setTitleIcon('i-edit');
+            submitText.textContent = '保存修改';
+            cancelEditBtn.hidden = false;
+            updatePreview();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function exitEditMode() {
+            editingId = null;
+            formEl.reset();
+            formTitleText.textContent = '新增事项';
+            setTitleIcon('i-plus');
+            submitText.textContent = '上传';
+            cancelEditBtn.hidden = true;
+            updatePreview();
+        }
+
+        cancelEditBtn.addEventListener('click', exitEditMode);
+
+        formEl.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = formEl.querySelector('button[type=submit]');
+            const data = Object.fromEntries(new FormData(formEl).entries());
+            // 复选框未勾选时根本不出现在 FormData 里，显式补 0，
+            // 否则「取消置顶/关闭接龙」提交上去会被当成"没传这个字段"
+            data.pinned = pinnedInput.checked ? 1 : 0;
+            data.rollcall = rollcallInput.checked ? 1 : 0;
+            data.roll_note_required = (rollNoteRequiredInput && rollNoteRequiredInput.checked) ? 1 : 0;
+            const id = editingId;
+            if (btn) btn.disabled = true;
+            try {
+                const r = await fetch(id ? '/api/notices/' + id : '/api/notices', {
+                    method: id ? 'PUT' : 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                });
+                const j = await r.json();
+                if (j.ok) {
+                    if (id) exitEditMode(); else { formEl.reset(); updatePreview(); }
+                    // switchCat 会重置 foldLoaded，折叠区下次展开时自然重新拉取
+                    await switchCat(data.category || currentCat);
+                } else {
+                    alert(j.msg || (id ? '保存失败' : '上传失败'));
+                }
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        });
+
+        // ---- 删除 ----
+        async function handleDelete(btn) {
+            if (!confirm('确定删除这条事项？')) return;
+            const r = await fetch('/api/notices/' + btn.dataset.id, { method: 'DELETE' });
+            const j = await r.json();
+            if (!j.ok) {
+                alert(j.msg || '删除失败');
+                return;
+            }
+            // 正在编辑的就是这条 → 表单退回新增模式，避免保存到一个已删除的 id
+            if (editingId === Number(btn.dataset.id)) exitEditMode();
+            const inFold = !!btn.closest('.fold-body');
+            await Promise.all([loadCounts(), loadList()]);
+            // 删的是折叠区里的项且当前正展开：重载折叠内容，并保持展开状态
+            if (inFold && foldOpen) await loadFolded();
+        }
+
+        // ---- 置顶 / 取消置顶 ----
+        // 每个栏目只允许一条置顶：置为 true 时后端会自动顶替掉原有的那条，
+        // 返回 displaced 告知顶替了几条，这里据此提示用户。
+        // 折叠区里的项也能置顶 —— 置顶后它不再被折叠，会回到列表最前面。
+        async function handlePin(btn) {
+            const id = btn.dataset.id;
+            const want = btn.dataset.pinned !== '1';   // 当前已置顶 → 本次是取消
+            const inFold = !!btn.closest('.fold-body');
+
+            if (want && !inFold) {
+                // 只在自己栏目的进行中列表里提示顶替，避免打扰
+                const others = listEl.querySelectorAll('[data-pinned="1"]');
+                if (others.length) {
+                    if (!confirm('该栏目已有一条置顶事项，继续将顶替它。确定置顶这条吗？')) return;
+                }
+            }
+
+            btn.disabled = true;
+            try {
+                const r = await fetch('/api/notices/' + id + '/pin', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pinned: want }),
+                });
+                const j = await r.json();
+                if (!j.ok) {
+                    alert(j.msg || '操作失败');
+                    return;
+                }
+                await Promise.all([loadCounts(), loadList()]);
+                if (inFold && foldOpen) await loadFolded();
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // ---- 修改：把该条内容回填表单并切到编辑模式 ----
+        // 折叠区里的项同样可编辑（它只是一条更早的记录）
+        function handleEdit(btn) {
+            const row = rowsById.get(Number(btn.dataset.id));
+            if (!row) {
+                alert('这条数据已刷新，请重新加载页面后再试');
+                return;
+            }
+            enterEditMode(row);
+        }
+
+        // 列表区与折叠区共用一套委托：依次判删除 / 置顶 / 编辑
+        // （用类名而非 data-* 选择器，`.del` / `.pin-btn` / `.edit-btn` 只是行为标记，
+        //   外观一律由 .btn-sm 加配色类决定，样式与行为不互相绑死）
+        function delegateActions(container) {
+            container.addEventListener('click', (e) => {
+                const del = e.target.closest('.del');
+                if (del) { handleDelete(del); return; }
+                const pin = e.target.closest('.pin-btn');
+                if (pin) { handlePin(pin); return; }
+                const edit = e.target.closest('.edit-btn');
+                if (edit) { handleEdit(edit); return; }
+            });
+        }
+        delegateActions(listEl);
+        delegateActions(foldBody);
+
+        // 初始加载
+        switchCat(currentCat);
+    </script>
+</body>
+</html>

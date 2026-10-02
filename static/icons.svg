@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  班级事务管理系统 —— 内联图标精灵（cute / 圆头圆角线性风格）
+
+  为什么不再用 Font Awesome CDN：
+  1. 线上是校园网 + 国内访问，cdnjs / Google Fonts 经常超时，
+     图标会整片变空白（页面只剩文字），风格立刻崩掉；
+  2. 本文件是可缓存的本地静态资源，零网络依赖，图标永远不会「掉」；
+  3. 统一 24×24 视框 + 1.8 圆头描边，粗细与圆角一致，才是「简约可爱」的基础。
+
+  用法：<svg class="ic"><use href="/static/icons.svg#i-bell"></use></svg>
+  颜色随 currentColor 走，尺寸随 font-size 走（见 style.css 的 .ic）。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <!-- 通知：圆头小铃铛 -->
+    <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3.2a5.6 5.6 0 0 0-5.6 5.6c0 4-1.6 5.2-1.6 5.2h14.4s-1.6-1.2-1.6-5.2A5.6 5.6 0 0 0 12 3.2Z"/>
+        <path d="M10.2 17.6a2 2 0 0 0 3.6 0"/>
+    </symbol>
+
+    <!-- 作业：摊开的小书 -->
+    <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 6.6C10.4 5.4 8.4 4.8 6 4.8c-1.2 0-2 .2-2 .2v13s.8-.2 2-.2c2.4 0 4.4.6 6 1.8 1.6-1.2 3.6-1.8 6-1.8 1.2 0 2 .2 2 .2v-13s-.8-.2-2-.2c-2.4 0-4.4.6-6 1.8Z"/>
+        <path d="M12 6.6v13"/>
+    </symbol>
+
+    <!-- 网课：小笔记本 -->
+    <symbol id="i-laptop" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4.2" y="5.4" width="15.6" height="10.4" rx="2.4"/>
+        <path d="M2.4 18.6h19.2"/>
+    </symbol>
+
+    <!-- 我的：圆头小人 -->
+    <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="8.4" r="3.6"/>
+        <path d="M4.8 20c0-3.6 3.2-5.6 7.2-5.6s7.2 2 7.2 5.6"/>
+    </symbol>
+
+    <!-- 置顶：图钉 -->
+    <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9.4 3.6h5.2l-.7 5.1 3.1 3.4H7l3.1-3.4-.7-5.1Z"/>
+        <path d="M12 12.1V20"/>
+    </symbol>
+
+    <!-- 地点：水滴形定位点 -->
+    <symbol id="i-pin-loc" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 20.4s6-5.4 6-9.6a6 6 0 1 0-12 0c0 4.2 6 9.6 6 9.6Z"/>
+        <circle cx="12" cy="10.6" r="2.2"/>
+    </symbol>
+
+    <!-- 归档箱 -->
+    <symbol id="i-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3.2" y="4.4" width="17.6" height="4.6" rx="1.8"/>
+        <path d="M4.8 9v9a1.8 1.8 0 0 0 1.8 1.8h10.8A1.8 1.8 0 0 0 19.2 18V9"/>
+        <path d="M10 13.4h4"/>
+    </symbol>
+
+    <!-- 向下小箭头 -->
+    <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6.4 9.6 12 15.2l5.6-5.6"/>
+    </symbol>
+
+    <!-- 返回箭头 -->
+    <symbol id="i-arrow-left" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 12H5.4"/>
+        <path d="M11 5.6 5 12l6 6.4"/>
+    </symbol>
+
+    <!-- 新增：圆圈加号 -->
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="8.6"/>
+        <path d="M12 8.4v7.2M8.4 12h7.2"/>
+    </symbol>
+
+    <!-- 列表 -->
+    <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8.6 6.6h10.8M8.6 12h10.8M8.6 17.4h10.8"/>
+        <circle cx="4.6" cy="6.6" r="1.1" fill="currentColor" stroke="none"/>
+        <circle cx="4.6" cy="12" r="1.1" fill="currentColor" stroke="none"/>
+        <circle cx="4.6" cy="17.4" r="1.1" fill="currentColor" stroke="none"/>
+    </symbol>
+
+    <!-- 保存 -->
+    <symbol id="i-save" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5.6 3.8h9.2l4.4 4.4v11.2a1.8 1.8 0 0 1-1.8 1.8H5.6a1.8 1.8 0 0 1-1.8-1.8V5.6a1.8 1.8 0 0 1 1.8-1.8Z"/>
+        <path d="M8 3.8v5h7v-5"/>
+        <path d="M8 20.2v-5.4h8v5.4"/>
+    </symbol>
+
+    <!-- 垃圾桶 -->
+    <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4.6 7.2h14.8"/>
+        <path d="M9.6 7.2V5.4a1.4 1.4 0 0 1 1.4-1.4h2a1.4 1.4 0 0 1 1.4 1.4v1.8"/>
+        <path d="M6.6 7.2l.9 11.4A1.8 1.8 0 0 0 9.3 20.4h5.4a1.8 1.8 0 0 0 1.8-1.8l.9-11.4"/>
+        <path d="M10.4 11v5.4M13.6 11v5.4"/>
+    </symbol>
+
+    <!-- 完成：圆头对勾 -->
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5.4 12.8l4.2 4.2 9-9.6"/>
+    </symbol>
+
+    <!-- 提示：圆圈感叹号 -->
+    <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="8.6"/>
+        <path d="M12 11.2v5"/>
+        <circle cx="12" cy="7.9" r="1.05" fill="currentColor" stroke="none"/>
+    </symbol>
+
+    <!-- 关闭 / 删除小叉 -->
+    <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M7 7l10 10M17 7 7 17"/>
+    </symbol>
+
+    <!-- 文件 -->
+    <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13.4 3.6H7.4A1.8 1.8 0 0 0 5.6 5.4v13.2a1.8 1.8 0 0 0 1.8 1.8h9.2a1.8 1.8 0 0 0 1.8-1.8V8.6l-5-5Z"/>
+        <path d="M13.4 3.6v5h5"/>
+    </symbol>
+
+    <!-- 纸飞机（404） -->
+    <symbol id="i-plane" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20.6 4.2 3.4 10.6l6.4 2.8 2.8 6.4 8-15.6Z"/>
+        <path d="M9.8 13.4l10.8-9.2"/>
+    </symbol>
+
+    <!-- 刷新箭头 -->
+    <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 12a8 8 0 1 1-2.8-6.1"/>
+        <path d="M20.4 4.2v5h-5"/>
+    </symbol>
+
+    <!-- 接龙：一列排队的圆头小人 -->
+    <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="9.2" cy="8.2" r="3.2"/>
+        <path d="M3.4 19.4c0-3.2 2.6-5 5.8-5s5.8 1.8 5.8 5"/>
+        <path d="M16.2 5.4a3.2 3.2 0 0 1 0 6.2"/>
+        <path d="M17.4 14.8c2 .6 3.2 2 3.2 4.6"/>
+    </symbol>
+
+    <!-- 编辑：铅笔 -->
+    <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15.4 4.6l4 4L9.2 18.8l-4.8 1 1-4.6L15.4 4.6Z"/>
+        <path d="M13.6 6.4l4 4"/>
+    </symbol>
+
+    <!-- 复制：两张错开的圆角纸片（接龙页的「复制接龙结果」） -->
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="8.4" y="8.4" width="11.2" height="11.2" rx="2.4"/>
+        <path d="M15.6 5.6a2.4 2.4 0 0 0-2.4-2.4H6.8a2.4 2.4 0 0 0-2.4 2.4v6.4a2.4 2.4 0 0 0 2.4 2.4"/>
+    </symbol>
+
+    <!-- 剩余时间：小闹钟（接龙页事项名称旁的倒计时胶囊） -->
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12.6" r="7"/>
+        <path d="M12 9.4v3.4l2.2 1.4"/>
+        <path d="M5.6 4.8 8 2.8"/>
+        <path d="M18.4 4.8 16 2.8"/>
+    </symbol>
+
+</svg>

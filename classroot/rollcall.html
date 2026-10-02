@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#fdf9f4">
+    <title>接龙 · {{ n.title }} | 智造1班</title>
+    {#- 与管理页共用同一份设计系统与页面骨架（顶栏 / 卡片 / 提示条 / 表单控件
+        全部来自 static/style.css），本页不另写一套色值。 -#}
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+    <link rel="icon" href="{{ url_for('static', path='/cover.ico') }}" type="image/x-icon">
+</head>
+<body class="rollcall">
+    <div class="admin-topbar">
+        <h1>
+            <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-users"></use></svg>
+            接龙报名
+        </h1>
+        <a class="btn btn-primary" href="/">
+            <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-arrow-left"></use></svg>
+            返回主页
+        </a>
+    </div>
+    {#- 事项名称块（v1.8.0）：本页唯一保留的事项信息，套一层高亮块让它更醒目；
+        右侧跟一颗剩余时间胶囊 —— 同学点进来第一眼就是"还剩多久"。
+        胶囊由服务端先渲染出文案（没填截止时间就不渲染），再由页面脚本每秒刷新。
+        注意这里用的是后端单独算的 countdown：本人已接龙时首页那颗不再倒数，
+        但接龙页的剩余时间是给还没报名的同学看的，本人来了也得照常显示。 -#}
+    <div class="rc-hero">
+        <div class="rc-title" id="rcTitle">{{ n.title }}</div>
+        {% if countdown %}
+        <div class="rc-countdown" id="rcCountdown" data-deadline="{{ n.deadline }}"
+             title="截止时间：{{ n.deadline }}">
+            <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-clock"></use></svg>
+            <span id="rcCountdownText">{{ countdown }}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    {#- 成功 / 撤销提示：由跳转时带上的 ?joined=1 / ?undo=1 决定，
+        刷新页面不会重复出现，也不需要额外存状态。 -#}
+    {% if just_joined %}
+    <div class="notice-bar ok">
+        <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-check"></use></svg>
+        <div>接龙成功！你排在名单第 <strong>{{ mine.seq if mine else entries | length }}</strong> 位。要接着替其他同学报名，在下面换个姓名继续提交就行。</div>
+    </div>
+    {% elif just_undone %}
+    <div class="notice-bar">
+        <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-info"></use></svg>
+        <div>已撤销这条接龙记录。</div>
+    </div>
+    {% elif mine %}
+    <div class="notice-bar ok">
+        <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-check"></use></svg>
+        <div>这台设备已登记 {{ my_count }} 条（最早那条是第 {{ mine.seq }} 位）。要接着替其他同学报名，在下面换个姓名继续提交即可，不限条数。</div>
+    </div>
+    {% endif %}
+
+    <div class="notice-bar" id="rcErr" hidden>
+        <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-info"></use></svg>
+        <div id="rcErrText"></div>
+    </div>
+
+    <!-- 接龙名单 + 报名表单 -->
+    <section class="admin-card">
+        <h2>
+            <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-users"></use></svg>
+            {#- 整句包在一个 span 里：h2 是 flex 容器，拆成多个文本节点会被 gap 撑出空格。
+                nowrap 是为了窄屏（320px）下宁可让复制按钮换行，也别把「（3 人）」折成两行 -#}
+            <span class="rc-list-title">接龙名单（<span id="rcCount">{{ entries | length }}</span> 人）</span>
+            {#- 复制按钮与标题同一行，靠右（margin-left:auto）；type=button 防止被表单回车连带触发 -#}
+            <button type="button" class="rc-copy" id="rcCopy" title="复制成「事项名称 + 姓名/附加信息 + 名单」的纯文本">
+                <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-copy"></use></svg>
+                <span>复制接龙结果</span>
+            </button>
+        </h2>
+
+        <div class="rc-list" id="rcList">
+            {% for e in entries %}
+            <div class="rc-item{{ ' mine' if e.mine else '' }}">
+                <span class="rc-no">{{ e.seq }}</span>
+                <span class="rc-name">{{ e.name }}</span>
+                {% if e.note %}<span class="rc-note-inline">{{ e.note }}</span>{% endif %}
+                <span class="rc-time">{{ e.joined_at_short }}</span>
+                {% if e.mine %}
+                <button class="rc-cancel" data-id="{{ e.id }}" title="撤销我的接龙">
+                    <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-close"></use></svg>
+                </button>
+                {% endif %}
+            </div>
+            {% else %}
+            {#- 空名单的文案跟着开没开报名走：已截止还写「第一个就是你」等于在邀请报名 -#}
+            <div class="rc-empty">{{ '还没有人接龙，第一个就是你～' if roll_open else '这次接龙没有人报名。' }}</div>
+            {% endfor %}
+        </div>
+
+        {% if roll_open %}
+        <form id="rcForm" autocomplete="off">
+            <div class="admin-grid">
+                <div>
+                    <label class="field-label" for="rcName">姓名 <span class="req">*</span></label>
+                    <input id="rcName" name="name" maxlength="{{ name_max }}" placeholder="如：张三" required>
+                    <div class="hint">最多 {{ name_max }} 个字。</div>
+                </div>
+                {#- 第二栏不再是写死的「备注」：名称、类别、是否必填都由事项自己配置
+                    （管理页设置，存在 notices 表里）。两种类别落库都是同一个字符串，
+                    区别只是"报名时少打几个字"：
+                      输入文本 → 一个 maxlength 输入框
+                      进行选择 → 候选的每一项都当成一颗按钮直接铺出来（v1.9.0） -#}
+                <div>
+                    {#- 选择类别的选项不在 #rcNote 上，label 的 for 指过去会指空；
+                        文本类别才挂 for，免得点了标签什么都不发生 -#}
+                    <label class="field-label"{% if n.roll_note_mode != 'select' %} for="rcNote"{% endif %}>{{ n.roll_note_label }}{% if n.roll_note_required %} <span class="req">*</span>{% endif %}</label>
+                    {% if n.roll_note_mode == 'select' %}
+                    {#- v1.9.0：候选项全部直接铺在页面上（不再是下拉框）——
+                        下拉框得先点开才知道有哪些选项，选项少的时候纯属多一步；
+                        现在点一下就选中。容器是 flex-wrap：优先排成一行，
+                        一行放不下（选项多 / 屏幕窄）才自动换到下一行。
+                        非必填时第一颗是「不填」并默认选中，对应 note = ""；
+                        必填时一颗都不预选，空着提交会被前端与接口拦下。 -#}
+                    <div class="rc-choices" id="rcNoteChoices">
+                        {% if not n.roll_note_required %}
+                        <label class="rc-choice">
+                            <input type="radio" name="note" value="" checked>
+                            <span>不填</span>
+                        </label>
+                        {% endif %}
+                        {% for opt in n.roll_note_options %}
+                        <label class="rc-choice">
+                            <input type="radio" name="note" value="{{ opt }}">
+                            <span>{{ opt }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <div class="hint">从管理页配好的 {{ n.roll_note_options | length }} 个选项里点一个就行，不用打字。</div>
+                    {% else %}
+                    <input id="rcNote" name="note" maxlength="{{ note_max }}" placeholder="最多 {{ note_max }} 个字">
+                    <div class="hint">最多 {{ note_max }} 个字。</div>
+                    {% endif %}
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary submit-btn" id="rcSubmit">
+                <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-check"></use></svg>
+                我要接龙
+            </button>
+            <div class="hint">同一个姓名在同一事项里只能报一次；同一台设备可以连续替多位同学代报名，不限条数。接龙后返回主页，这条事项会显示「已接龙」并按已完成处理。</div>
+        </form>
+        {% else %}
+        {#- 已过截止时间（v1.9.0）：报名表单整块不渲染，改成一条说明。
+            名单与「复制接龙结果」照旧 —— 班委正是照着这份名单办事，
+            所以页面不能失效，只是不再收新的报名。
+            接口层还有一道 db.add_rollcall 的拒绝：同学可能在截止前就打开了页面、
+            截止后才点提交（那会儿表单还是渲染好的），只藏表单拦不住。 -#}
+        <div class="notice-bar" id="rcClosed">
+            <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-clock"></use></svg>
+            <div>{{ closed_text }}上面的名单已经定稿，可以用右上角的「复制接龙结果」直接取走。</div>
+        </div>
+        {% endif %}
+    </section>
+
+    <p class="update-info">版本号：1.9.0</p>
+
+    <script>
+        // 事项 id 由后端注入，接口路径与页面路径共用同一个值
+        const NOTICE_ID = {{ n.id }};
+        const NAME_MAX = {{ name_max }};
+        // 附加信息的名称与是否必填也由后端注入：页面提示语与服务端校验用同一份配置
+        const NOTE_LABEL = {{ n.roll_note_label | tojson }};
+        const NOTE_REQUIRED = {{ 'true' if n.roll_note_required else 'false' }};
+        const errBox = document.getElementById('rcErr');
+        const errText = document.getElementById('rcErrText');
+        const form = document.getElementById('rcForm');
+        const nameInput = document.getElementById('rcName');
+        const submitBtn = document.getElementById('rcSubmit');
+
+        function showErr(msg) {
+            errText.textContent = msg;
+            errBox.hidden = false;
+            errBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        // 附加信息的取值：两种类别（文本框 / 一排单选项）最后都收成一个字符串。
+        // 单选项那一组是 name="note" 的 radio：只有「选中了哪一个」才算填了，
+        // 所以这里必须先找 :checked；一个都没选就是空串（= 没填，必填时会被拦下）。
+        // 兜底那一步必须显式排除 radio —— querySelector 会把第一个 radio 选出来，
+        // 直接取它的 value 等于替用户选了一项，必填校验也就形同虚设。
+        function noteValue() {
+            const checked = form.querySelector('input[name="note"]:checked');
+            if (checked) return checked.value.trim();
+            const field = form.querySelector('input[name="note"]:not([type="radio"])');
+            return field ? field.value.trim() : '';
+        }
+
+        // ---- 剩余时间 ----
+        // 事项名称块右侧的胶囊，按本机时钟每秒重算一遍，不必反复问服务器。
+        // 格式与 db._duration_text 一致：≥SECOND_PRECISION_MINUTES 分钟只到分，
+        // 不足则精确到秒（最后十分钟最有紧迫感）。
+        const cdEl = document.getElementById('rcCountdown');
+        const cdText = document.getElementById('rcCountdownText');
+        const SECOND_PRECISION_MINUTES = {{ second_precision_minutes }};
+
+        function parseLocal(raw) {
+            // 后端给的是 "YYYY-MM-DD HH:MM"，Safari 不认空格分隔的写法，需转成 ISO
+            const t = Date.parse(String(raw || '').trim().replace(' ', 'T'));
+            return Number.isNaN(t) ? null : t;
+        }
+
+        function durationText(ms) {
+            let total = Math.floor(Math.abs(ms) / 1000);
+            const d = Math.floor(total / 86400); total %= 86400;
+            const h = Math.floor(total / 3600); total %= 3600;
+            const m = Math.floor(total / 60);
+            const s = total % 60;
+            if (d) return d + '天' + h + '小时';
+            if (h) return h + '小时' + m + '分';
+            if (m >= SECOND_PRECISION_MINUTES) return m + '分钟';
+            if (m) return m + '分' + s + '秒';
+            return s + '秒';
+        }
+
+        function tickCountdown() {
+            if (!cdEl) return;
+            const ts = parseLocal(cdEl.dataset.deadline);
+            if (ts === null) return;
+            const ms = ts - Date.now();
+            // 最后 10 分钟转粉红、过期换成"已过 …"并填成实心粉红（别写「剩 0秒」）
+            cdEl.classList.toggle('soon', ms > 0 && ms <= SECOND_PRECISION_MINUTES * 60000);
+            cdEl.classList.toggle('over', ms <= 0);
+            cdText.textContent = (ms <= 0 ? '已过 ' : '剩 ') + durationText(ms);
+        }
+
+        if (cdEl) {
+            tickCountdown();
+            setInterval(tickCountdown, 1000);
+        }
+
+        // ---- 接龙 ----
+        // v1.9.0：截止时间已过时页面**整块没有表单**（form / nameInput / submitBtn 都是 null），
+        // 所以处理函数单独写成具名函数，最后判一下再接线 —— 不判的话脚本会在这里抛
+        // TypeError，后面的剩余时间刷新、复制名单、撤销全都跟着不执行。
+        async function joinRollcall(e) {
+            e.preventDefault();
+            const name = nameInput.value.trim();
+            if (!name) { showErr('请填写姓名'); return; }
+            if (name.length > NAME_MAX) { showErr('姓名最多 ' + NAME_MAX + ' 个字'); return; }
+            const note = noteValue();
+            // 事项把附加信息设成"强制填写"时，这里先拦一道（后端还会再校验一次）
+            if (NOTE_REQUIRED && !note) { showErr('请填写' + NOTE_LABEL); return; }
+            errBox.hidden = true;
+            submitBtn.disabled = true;
+            try {
+                const r = await fetch('/api/rollcall/' + NOTICE_ID, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name, note: note }),
+                });
+                const j = await r.json();
+                if (j.ok) {
+                    // 带 ?joined=1 跳回本页：名单、序号、成功提示全部由后端重新渲染，
+                    // 刷新不会重复提交（PRG），也不会看到过期名单。
+                    location.href = '/rollcall/' + NOTICE_ID + '?joined=1';
+                    return;
+                }
+                // 含"页面打开后才过点"的情况：接口回 400 +「已于 … 截止」，
+                // 原样显示（别改写成"失败，请重试"，否则同学会一直重试）
+                showErr(j.msg || '接龙失败，请稍后再试');
+            } catch (err) {
+                showErr('网络异常，请稍后再试');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        }
+
+        if (form) form.addEventListener('submit', joinRollcall);
+
+        // ---- 复制接龙结果 ----
+        // 格式固定为三部分：事项名称 / 表头行「姓名 + 附加信息名称」/ 每位同学的姓名与附加信息。
+        // 姓名与附加信息之间用制表符分隔，粘进 Excel、WPS 会自动分成两列，
+        // 粘进微信、QQ 也只是一段空格，不会粘出乱码。
+        // 表头用事项自己配的附加信息名称（比如「能否到场」，
+        // 复制出来的表格才是能直接看的）；名称由后端注入，不在这里另写一份。
+        // 名单直接从 DOM 上读（而不是再注入一份 JSON），所见即所复制，
+        // 也避免用户刚提交完、页面名单已变而复制内容还是旧的。
+        const copyBtn = document.getElementById('rcCopy');
+        const copyLabel = copyBtn.querySelector('span');
+        const COPY_LABEL = copyLabel.textContent;
+
+        function rollcallText() {
+            const lines = [document.getElementById('rcTitle').textContent.trim(),
+                           '姓名\t' + NOTE_LABEL];
+            document.querySelectorAll('#rcList .rc-item').forEach(row => {
+                const nameEl = row.querySelector('.rc-name');
+                const noteEl = row.querySelector('.rc-note-inline');
+                if (!nameEl) return;                  // 空名单占位行没有 .rc-name
+                lines.push(nameEl.textContent.trim() + '\t'
+                           + (noteEl ? noteEl.textContent.trim() : ''));
+            });
+            return lines.join('\n');
+        }
+
+        // navigator.clipboard 只在 https / localhost 这类安全上下文里存在，
+        // 线上是普通 http（见部署说明），所以必须有 execCommand 兜底。
+        async function copyText(text) {
+            if (navigator.clipboard && window.isSecureContext) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    return true;
+                } catch (err) { /* 落到下面的兜底 */ }
+            }
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.top = '-1000px';
+            document.body.appendChild(ta);
+            ta.select();
+            ta.setSelectionRange(0, ta.value.length);
+            let ok = false;
+            try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+            document.body.removeChild(ta);
+            return ok;
+        }
+
+        copyBtn.addEventListener('click', async () => {
+            const ok = await copyText(rollcallText());
+            if (!ok) { showErr('复制失败，请长按名单手动选择复制'); return; }
+            copyBtn.classList.add('done');
+            copyLabel.textContent = '已复制';
+            setTimeout(() => {
+                copyBtn.classList.remove('done');
+                copyLabel.textContent = COPY_LABEL;
+            }, 1600);
+        });
+
+        // ---- 撤销（只出现在自己设备登记的那条上，后端也会再校验令牌） ----
+        document.querySelectorAll('.rc-cancel').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                if (!confirm('确定撤销这条接龙吗？')) return;
+                btn.disabled = true;
+                try {
+                    const r = await fetch('/api/rollcall/' + NOTICE_ID + '/' + btn.dataset.id,
+                                          { method: 'DELETE' });
+                    const j = await r.json();
+                    if (j.ok) {
+                        location.href = '/rollcall/' + NOTICE_ID + '?undo=1';
+                        return;
+                    }
+                    showErr(j.msg || '撤销失败');
+                } catch (err) {
+                    showErr('网络异常，请稍后再试');
+                } finally {
+                    btn.disabled = false;
+                }
+            });
+        });
+    </script>
+</body>
+</html>

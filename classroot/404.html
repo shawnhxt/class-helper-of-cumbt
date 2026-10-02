@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#fdf9f4">
+    <title>404 - 页面未找到 | 智造1班</title>
+    {#- 与首页 / 管理页共用同一份设计系统；不再自我声明一套色值，
+        也不依赖 Google Fonts 与 emoji 图标（校园网下经常加载失败）。 -#}
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+    <link rel="icon" href="{{ url_for('static', path='/cover.ico') }}" type="image/x-icon">
+</head>
+<body class="page-404">
+    <div class="error-card">
+        <div class="illustration">
+            <div class="circle-bg"></div>
+            <div class="plane">
+                <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-plane"></use></svg>
+            </div>
+        </div>
+
+        <div class="error-code">404</div>
+        <h1 class="error-title">哎呀，通知飞走了～</h1>
+        <p class="error-desc">
+            你访问的页面可能已被移除、更名或暂时不可用。<br>
+            （其实大概率是没时间写这个页面qaq）
+        </p>
+
+        <div class="btn-group">
+            <a href="/" class="btn btn-primary">
+                <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-arrow-left"></use></svg>
+                返回首页
+            </a>
+            <button class="btn btn-ghost" onclick="history.back()">
+                <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-refresh"></use></svg>
+                返回上页
+            </button>
+        </div>
+
+        <p class="footer-hint">中国矿业大学 · 智造1班通知收纳系统</p>
+    </div>
+</body>
+</html>

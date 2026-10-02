@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#fdf9f4">
+    <title>北矿智造1班通知收纳</title>
+    {#- 图标与字体都不再依赖外部 CDN：
+        Font Awesome / Google Fonts 在校园网下经常超时，会让整页图标变空白。
+        图标改为本地 static/icons.svg 的 SVG 精灵，字体用系统字体栈（见 style.css）。 -#}
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+    <link rel="icon" href="{{ url_for('static', path='/cover.ico') }}" type="image/x-icon">
+</head>
+<body class="has-bottom-nav">
+
+    <!-- 页眉 -->
+    <header class="header" id="mainHeader">
+        <h1 id="pageTitle">班级通知</h1>
+        <div class="sub-title" id="pageSubTitle">中国矿业大学 · 智造1班</div>
+    </header>
+
+    <!-- 下拉刷新指示器 -->
+    <div class="ptr-element" id="ptrElement">
+        <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-refresh"></use></svg>
+    </div>
+
+    {#- ============ 事项卡片宏：三个栏目共用，避免重复模板 ============
+        级别 → 卡片类名：置顶 / 紧急 / 普通 / 已完成，四者各有各的书脊色与底色
+        （普通是 v1.7.0 起才有的类，见 style.css 的 .list-item.normal）。
+        没有级别类名的 .list-item 只剩「我的」栏目与空栏目占位卡，保持中性米白。
+        data-* 供客户端倒计时刷新使用：
+          data-deadline 截止时间（ISO 风格，空则不刷新）
+          data-category 分类，决定紧急阈值
+          data-pinned   是否置顶，置顶项级别固定不随时间变化
+          data-joined   是否已接龙，已接龙的不再倒数、级别也不再变
+    -#}
+    {%- macro item_card(n, tag_class) -%}
+    <div class="list-item{% if n.level == 'pinned' %} pinned{% elif n.level == 'urgent' %} urgent{% elif n.level == 'done' %} done{% else %} normal{% endif %}"
+         data-deadline="{{ n.deadline }}" data-category="{{ n.category }}"
+         data-pinned="{{ 1 if n.pinned else 0 }}" data-joined="{{ 1 if n.joined else 0 }}">
+        <div class="item-content">
+            <span class="item-name">{% if n.pinned %}<svg class="ic pin-icon" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-pin"></use></svg>{% endif %}{{ n.title }}</span>
+            {#- 小信息块（级别徽标 / N 人接龙 / 标签 / 剩余时间）装进同一个 .item-tags：
+                它们是同一层级的补充信息，默认排成一行，一行放不下才整体换行。
+                以前每块各占一行（.item-content 是纵向 flex），一条事项四行全是胶囊，
+                列表又长又散；标题不并进来 —— 它是主体，且常常很长。 -#}
+            <div class="item-tags">
+                {#- 已接龙时级别徽标直接写「已接龙」：对这个人来说这件事已经办完了，
+                    再显示「已完成」看不出是因为接龙还是因为时间到了 -#}
+                <span class="item-tag tag-{{ n.level }}">{{ '已接龙' if n.joined else level_name[n.level] }}</span>
+                {% if n.rollcall %}
+                <span class="item-tag tag-roll">
+                    <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-users"></use></svg>
+                    {{ n.rollcount }} 人接龙
+                </span>
+                {% endif %}
+                {% if n.tag %}
+                <span class="item-tag {{ tag_class }}">{{ n.tag }}</span>
+                {% endif %}
+                {% if n.countdown %}
+                <span class="item-countdown">{{ n.countdown }}</span>
+                {% endif %}
+            </div>
+            {% if n.note %}<div class="item-note">{{ n.note }}</div>{% endif %}
+            {#- 只有「还没接龙」的卡片才需要提示可点：已接龙的那条级别徽标已经写着
+                「已接龙」，再来一句「已接龙，点击查看名单」纯属重复，v1.8.0 删掉。
+                v1.9.0：截止时间已过的接龙改成中性的「已截止」提示（照样可点进去看名单），
+                否则同学点进去才发现报不了名，白跑一趟。 -#}
+            {% if n.rollcall and not n.joined %}
+            <div class="roll-cta{% if not n.roll_open %} closed{% endif %}">
+                <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-users"></use></svg>
+                {{ '点击卡片进入接龙' if n.roll_open else '接龙已截止，点击查看名单' }}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="item-meta">
+            <div>
+                {% if n.date_label %}<div class="item-time">{{ n.date_label }}</div>{% endif %}
+                {% if n.time_label %}<div class="item-time-sub">{{ n.time_label }}</div>{% endif %}
+            </div>
+            {% if n.location %}
+            <div class="item-location">
+                <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-pin-loc"></use></svg>{{ n.location }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {%- endmacro -%}
+
+    {#- 接龙事项整块可点，进入 /rollcall/{id}；接龙优先于外链 ——
+        外链在接龙页里仍然保留一个按钮，不会丢。
+        其余事项维持原样：有外链才是链接，没有就是一张静态卡片。 -#}
+    {%- macro item(n, tag_class) -%}
+    {% if n.rollcall %}<a href="/rollcall/{{ n.id }}">{{ item_card(n, tag_class) }}</a>
+    {% elif n.link %}<a href="{{ n.link }}">{{ item_card(n, tag_class) }}</a>
+    {% else %}{{ item_card(n, tag_class) }}{% endif %}
+    {%- endmacro -%}
+
+    {#- 空栏目占位：虚线框，比实心卡片更轻，不抢真实事项的注意力 -#}
+    {%- macro empty_card(title, tip) -%}
+    <div class="list-item is-empty">
+        <span class="item-name">{{ title }}</span>
+        <div class="item-note">{{ tip }}</div>
+    </div>
+    {%- endmacro -%}
+
+    {#- 折叠条：只有存在「已完成且超过1天且未置顶」的事项时才渲染，
+        跟随栏目内容排在列表末尾，内容由 JS 点击时才拉取。 -#}
+    {%- macro fold_bar(cat, count) -%}
+    {% if count %}
+    <div class="fold-bar" data-cat="{{ cat }}" data-count="{{ count }}">
+        <span>
+            <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-archive"></use></svg>
+            已完成 {{ count }} 条 · 点击展开
+        </span>
+        <svg class="ic chev" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-chevron-down"></use></svg>
+    </div>
+    <div class="fold-body" data-cat="{{ cat }}"></div>
+    {% endif %}
+    {%- endmacro -%}
+
+    <!-- ================= 页面1：班级通知 ================= -->
+    <main class="page active" id="page-notice">
+        {% for n in notices %}
+        {{ item(n, 'tag-notice') }}
+        {% else %}
+        {% if not folded_counts.notice %}
+        {{ empty_card('暂无通知', '去管理后台（/admin）添加第一条班级事项吧。') }}
+        {% endif %}
+        {% endfor %}
+        {{ fold_bar('notice', folded_counts.notice) }}
+    </main>
+
+    <!-- ================= 页面2：作业提醒 ================= -->
+    <main class="page" id="page-homework">
+        {% for n in homeworks %}
+        {{ item(n, 'tag-homework') }}
+        {% else %}
+        {% if not folded_counts.homework %}
+        {{ empty_card('暂无作业', '管理后台把分类选成「作业提醒」即可在此显示。') }}
+        {% endif %}
+        {% endfor %}
+        {{ fold_bar('homework', folded_counts.homework) }}
+    </main>
+
+    <!-- ================= 页面3：网课提醒 ================= -->
+    <main class="page" id="page-online">
+        {% for n in onlines %}
+        {{ item(n, 'tag-online') }}
+        {% else %}
+        {% if not folded_counts.online %}
+        {{ empty_card('暂无网课提醒', '管理后台把分类选成「网课提醒」即可在此显示。') }}
+        {% endif %}
+        {% endfor %}
+        {{ fold_bar('online', folded_counts.online) }}
+    </main>
+
+    <!-- ================= 页面4：我的 ================= -->
+    <main class="page" id="page-mine">
+        <div class="list-item">
+            <div class="item-content">
+                <span class="item-name">管理后台</span>
+                <div class="item-note">班委可访问 <a href="/admin">/admin</a> 增删班级事项、设置置顶，保存后首页自动更新。</div>
+            </div>
+        </div>
+        <div class="list-item">
+            <div class="item-content">
+                <span class="item-name">意见反馈</span>
+                <div class="item-note">欢迎为本网站提出意见和建议(私信HXT哈)，也十分欢迎加入我们的系统维护，我们一起学习成长，谢谢！祝你生活开心顺利！</div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ================= 底部导航栏 ================= -->
+    {#- 导航图标同时写在 data-icon 上：切换栏目时页眉标题跟着换，
+        标题左侧的小图标也一并换，无需在 JS 里硬编码图标名。 -#}
+    <nav class="bottom-nav" id="bottomNav">
+        <a href="#" class="nav-item active" data-target="page-notice" data-title="班级通知" data-icon="i-bell">
+            <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-bell"></use></svg>
+            <span>通知</span>
+        </a>
+        <a href="#" class="nav-item" data-target="page-homework" data-title="作业提醒" data-icon="i-book">
+            <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-book"></use></svg>
+            <span>作业</span>
+        </a>
+        <a href="#" class="nav-item" data-target="page-online" data-title="网课提醒" data-icon="i-laptop">
+            <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-laptop"></use></svg>
+            <span>网课</span>
+        </a>
+        <a href="#" class="nav-item" data-target="page-mine" data-title="我的" data-icon="i-user">
+            <svg class="ic" aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}#i-user"></use></svg>
+            <span>我的</span>
+        </a>
+    </nav>
+
+    <p class="update-info">最后一次更新时间：10-02 | 版本号：1.9.0</p>
+
+    {#- 客户端倒计时刷新所需的阈值，由后端注入，保证与 db.py 单一来源 -#}
+    <script>
+        window.CLASS_CONFIG = {
+            urgentHours: {{ urgent_hours_json }},
+            secondPrecisionMinutes: {{ second_precision_minutes }},
+            levelName: {{ level_name_json }},
+            foldDoneDays: {{ fold_done_days }}
+        };
+    </script>
+    <script src="{{ url_for('static', path='/app.js') }}" defer></script>
+</body>
+</html>
